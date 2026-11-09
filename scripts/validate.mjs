@@ -11,7 +11,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-export const SCHEMA = 1
+export const SCHEMA = 2
 
 const ANIMALS = ['octopus', 'fox', 'otter', 'beaver', 'owl', 'cat', 'bear', 'rabbit', 'panda', 'raccoon', 'penguin', 'frog', 'dog', 'squirrel']
 const CREW = ['coder', 'reviewer', 'evalRunner', 'researcher']
@@ -19,11 +19,12 @@ const FIRST_RUN_PLACEHOLDERS = ['name', 'purpose', 'feel']
 
 const LIST_KEYS = { schema: true, templates: true }
 const ENTRY_KEYS = { id: true, repo: true, ref: true, title: true, icon: true, summary: false }
-const PLAYBOOK_KEYS = { schema: true, title: true, icon: true, pitch: true, animal: false, colors: false, crew: false }
-const PREVIEW_KEYS = {
-  schema: true, command: true, env: false, ready: false, install: false, env_from_source: false,
-  conventions: false, page_file: false, pages: false, viewports: false,
-}
+const PLAYBOOK_KEYS = { schema: true, title: true, icon: true, pitch: true, animal: false, colors: false, crew: false,
+  page_file: false, pages: false, viewports: false }
+// darkmux's preview recipe (its client_preview reader): an unknown key is
+// refused there, and a template has no checkout for env_from_source.
+const RECIPE_VERSION = '1.0'
+const PREVIEW_KEYS = { schema_version: true, command: true, env: false, ready: false, install: false }
 
 /** Edit distance, for "did you mean". */
 function distance(a, b) {
@@ -108,6 +109,17 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
   }
   checkKeys(report, file, '', header, PLAYBOOK_KEYS)
   if ('schema' in header) checkSchema(report, file, 'schema', /^\d+$/.test(header.schema) ? Number(header.schema) : header.schema)
+  for (const key of ['page_file', 'pages', 'viewports']) {
+    if (key in header && !header[key]) report.add(file, key, 'empty')
+  }
+  if (header.viewports) {
+    for (const v of header.viewports.split(',').map((x) => x.trim())) {
+      if (!['desktop', 'tablet', 'phone'].includes(v)) report.add(file, 'viewports', `${v} is not a viewport (closest: ${closest(v, ['desktop', 'tablet', 'phone'])})`)
+    }
+  }
+  if (header.pages) {
+    for (const page of header.pages.split(',').map((x) => x.trim())) if (!page.startsWith('/')) report.add(file, 'pages', `${page} must start with /`)
+  }
   for (const key of ['title', 'icon', 'pitch']) if (key in header && !header[key]) report.add(file, key, 'empty')
   if (header.animal && !ANIMALS.includes(header.animal)) report.add(file, 'animal', `not one of Mux Bot's animals (closest: ${closest(header.animal, ANIMALS)})`)
   if (header.colors) {
@@ -151,7 +163,10 @@ export function validatePreview(report, text, file = '.darkmux/preview.json') {
   try { p = JSON.parse(text) } catch (e) { report.add(file, '(file)', `not valid JSON: ${e.message}`); return }
   if (typeof p !== 'object' || p === null || Array.isArray(p)) { report.add(file, '(file)', 'must be a JSON object'); return }
   checkKeys(report, file, '', p, PREVIEW_KEYS)
-  checkSchema(report, file, 'schema', p.schema)
+  if ('schema_version' in p && p.schema_version !== RECIPE_VERSION) report.add(file, 'schema_version', `must be "${RECIPE_VERSION}" (darkmux's recipe format)`)
+  if ('env' in p && p.env && typeof p.env === 'object' && p.env.HOST && p.env.HOST !== '0.0.0.0') {
+    report.add(file, 'env.HOST', 'must be 0.0.0.0: darkmux runs previews in a container and publishes the ports on 127.0.0.1')
+  }
   if ('command' in p && !isString(p.command)) report.add(file, 'command', 'must be a non-empty string')
   if ('env' in p) {
     if (typeof p.env !== 'object' || p.env === null || Array.isArray(p.env)) report.add(file, 'env', 'must be an object')
@@ -172,13 +187,7 @@ export function validatePreview(report, text, file = '.darkmux/preview.json') {
     }
   }
   const plainPath = (v) => isString(v) && !v.startsWith('/') && !v.split('/').includes('..')
-  if ('env_from_source' in p) {
-    if (!Array.isArray(p.env_from_source)) report.add(file, 'env_from_source', 'must be an array')
-    else p.env_from_source.forEach((f, i) => { if (!plainPath(f)) report.add(file, `env_from_source[${i}]`, 'must be a plain relative path') })
-  }
   if (p.install?.unless_exists !== undefined && !plainPath(p.install.unless_exists)) report.add(file, 'install.unless_exists', 'must be a plain relative path')
-  for (const key of ['conventions', 'page_file']) if (key in p && !isString(p[key])) report.add(file, key, 'must be a non-empty string')
-  for (const key of ['pages', 'viewports']) if (key in p && !(Array.isArray(p[key]) && p[key].every(isString))) report.add(file, key, 'must be an array of strings')
 }
 
 // ─── Running it ──────────────────────────────────────────────────────────

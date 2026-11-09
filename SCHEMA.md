@@ -1,6 +1,8 @@
 # Mux Bot template schema
 
-One versioned schema covers the three files a template takes part in: this repo's `templates.json`, and each template's `PLAYBOOK.md` and `.darkmux/preview.json`. Each file says which version it follows. This is **schema 1**.
+One versioned schema covers this repo's `templates.json` and each template's `PLAYBOOK.md`; each says which version it follows. This is **schema 2**. A template's `.darkmux/preview.json` is darkmux's own recipe, in darkmux's format (see below).
+
+**Schema 2** (from schema 1): `.darkmux/preview.json` holds only darkmux's recipe (`schema_version: "1.0"`), as darkmux refuses any other key, and the app's hints (`page_file`, `pages`, `viewports`, `conventions`) move into PLAYBOOK.md. Mux Bot still reads schema 1 templates.
 
 ## Versioning
 
@@ -14,7 +16,7 @@ One versioned schema covers the three files a template takes part in: this repo'
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "templates": [
     {
       "id": "website",
@@ -30,7 +32,7 @@ One versioned schema covers the three files a template takes part in: this repo'
 
 | Key | Required | What it is |
 |---|---|---|
-| `schema` | yes | `1`. |
+| `schema` | yes | `2`. |
 | `templates` | yes | The list. |
 | `id` | yes | Stable, lowercase letters, digits and dashes. A bot made from the template remembers it. |
 | `repo` | yes | `owner/name` on GitHub. Public. |
@@ -48,18 +50,25 @@ At the template's root, readable on GitHub. A header of `key: value` lines (a lo
 ```markdown
 # Playbook: a website
 
-schema: 1
+schema: 2
 title: Build a website
 icon: globe
 pitch: A one-page site you can grow.
 animal: fox
 colors: 0e9f8e, ffffff
 crew: coder
+page_file: src/pages/{page}.tsx
+pages: /
+viewports: desktop, phone
 
 ## Questions
 
 - What's the site called?
 - What is it for, in a sentence?
+
+## Conventions
+
+Vite + React. Each page is a component in src/pages/ ...
 
 ## Persona
 
@@ -83,17 +92,21 @@ Done when: ...
 
 | Header key | Required | What it is |
 |---|---|---|
-| `schema` | yes | `1`. |
+| `schema` | yes | `2` (`1` still reads, without the schema 2 keys). |
 | `title` | yes | The use case's name. |
 | `icon` | yes | An SF Symbol name. |
 | `pitch` | yes | One sentence on what you get. |
 | `animal` | no | The new bot's animal: octopus, fox, otter, beaver, owl, cat, bear, rabbit, panda, raccoon, penguin, frog, dog or squirrel. |
 | `colors` | no | The bot's main color, then its eye color, as 6-digit hex. |
 | `crew` | no | Comma-separated crew roles: coder, reviewer, evalRunner, researcher. Coder when left out. |
+| `page_file` | no | Where a page's source lives, `{page}` for the route's last segment (`/` is `home`). Schema 2. |
+| `pages` | no | Comma-separated paths worth previewing. Schema 2. |
+| `viewports` | no | Comma-separated widths worth checking: `desktop`, `tablet`, `phone`. Schema 2. |
 
 | Section | Required | What it is |
 |---|---|---|
 | `## Questions` | yes | What Mux Bot asks first, as `- ` bullets: the name, what it's for, how it should feel. |
+| `## Conventions` | no | A sentence or two on the project's layout, passed to the crew with every run. Schema 2. |
 | `## Persona` | yes | The new bot's persona; `{name}` becomes the bot's name. |
 | `## First run` | no | The new bot's first dispatch, written from your answers: one instruction per line, with `{name}`, `{purpose}` (the second question's answer) and `{feel}` (the third's). Mux Bot fills them in and joins the lines into one task, leaving out any line whose answer was left blank; the bot posts it as a dispatch card that waits for Approve. Any other `{placeholder}` is refused. |
 | `## Skill: <name>` | at least one | When it applies (with example asks in quotes; the first one is what the bot offers as an example), what to do, the files and conventions, and when it's done. Copied into the bot when it's made. |
@@ -102,34 +115,24 @@ An unknown header key is refused by name. Other `##` sections are ignored.
 
 ## .darkmux/preview.json
 
-How darkmux runs the live preview from the bot's work copy.
+darkmux's preview recipe, exactly as darkmux reads it: darkmux runs it, refuses any key it doesn't know, and for a project made from a template reads it from the project's first commit. A template has no checkout to copy files from, so it has no `env_from_source`. darkmux runs previews in a container and publishes the ports on 127.0.0.1, so the dev server listens on `0.0.0.0`.
 
 ```json
 {
-  "schema": 1,
+  "schema_version": "1.0",
   "command": "npm run dev",
-  "env": { "PORT": "{port}", "HOST": "127.0.0.1", "VITE_HMR_PORT": "{hmrPort}" },
+  "env": { "PORT": "{port}", "HOST": "0.0.0.0", "VITE_HMR_PORT": "{hmrPort}" },
   "ready": { "http": "/" },
-  "install": { "command": "npm ci --no-audit --no-fund", "unless_exists": "node_modules" },
-  "env_from_source": [".env"],
-  "conventions": "Each page is a component in src/pages/ ...",
-  "page_file": "src/pages/{page}.tsx",
-  "pages": ["/"],
-  "viewports": ["desktop", "phone"]
+  "install": { "command": "npm ci --no-audit --no-fund", "unless_exists": "node_modules" }
 }
 ```
 
 | Key | Required | What it is |
 |---|---|---|
-| `schema` | yes | `1`. |
+| `schema_version` | yes | `"1.0"`, darkmux's recipe format. |
 | `command` | yes | Starts the dev server. |
-| `env` | no | Its environment; `{port}` and `{hmrPort}` become the free ports darkmux picks. |
-| `ready` | no | `http`: the path that answers once it's up (default `/`). |
+| `env` | no | Its environment; `{port}` and `{hmrPort}` become the free ports darkmux picks (darkmux fills them in only here, not in `command`). |
+| `ready` | no | `http`: the path that answers once it's up. |
 | `install` | no | `command`, run first when `unless_exists` (a plain relative path) is missing. |
-| `env_from_source` | no | Untracked files (like `.env`) copied from the checkout a worktree was made from, never overwriting. Plain relative paths. |
-| `conventions` | no | A sentence or two on the layout, passed to the crew with every run. |
-| `page_file` | no | Where a page's source lives, `{page}` for the route's last segment (`/` is `home`). |
-| `pages` | no | Paths worth previewing. |
-| `viewports` | no | Widths worth checking: `desktop`, `tablet`, `phone`. |
 
-An unknown key is refused by name, as darkmux refuses unknown keys in its own files.
+A schema 1 template's preview.json was `"schema": 1` with the app's hints in it; darkmux no longer reads that file.
