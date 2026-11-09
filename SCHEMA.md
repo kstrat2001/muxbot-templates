@@ -20,7 +20,7 @@ One versioned schema covers this repo's `templates.json` and each template's `PL
   "templates": [
     {
       "id": "website",
-      "repo": "kstrat2001/muxbot-template-vite-react",
+      "repo": "kstrat2001/muxbot-template-site",
       "ref": "<40-character commit SHA>",
       "title": "Build a website",
       "icon": "globe",
