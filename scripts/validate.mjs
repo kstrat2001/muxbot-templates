@@ -13,13 +13,14 @@ import path from 'node:path'
 
 export const SCHEMA = 2
 
-const ANIMALS = ['octopus', 'fox', 'otter', 'beaver', 'owl', 'cat', 'bear', 'rabbit', 'panda', 'raccoon', 'penguin', 'frog', 'dog', 'squirrel']
 const CREW = ['coder', 'reviewer', 'evalRunner', 'researcher']
 const FIRST_RUN_PLACEHOLDERS = ['name', 'purpose', 'feel']
 
 const LIST_KEYS = { schema: true, templates: true }
 const ENTRY_KEYS = { id: true, repo: true, ref: true, title: true, icon: true, summary: false }
-const PLAYBOOK_KEYS = { schema: true, title: true, icon: true, pitch: true, animal: false, colors: false, crew: false,
+// Retired playbook keys: the bot's look is the user's choice (SCHEMA.md).
+const RETIRED_PLAYBOOK_KEYS = ['animal', 'colors']
+const PLAYBOOK_KEYS = { schema: true, title: true, icon: true, pitch: true, crew: false,
   page_file: false, pages: false, viewports: false }
 // darkmux's preview recipe (its client_preview reader): an unknown key is
 // refused there, and a template has no checkout for env_from_source.
@@ -107,7 +108,10 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
       header[m[1]] = m[2].trim()
     }
   }
-  checkKeys(report, file, '', header, PLAYBOOK_KEYS)
+  for (const key of RETIRED_PLAYBOOK_KEYS) {
+    if (key in header) report.add(file, key, "retired: a bot's look is the user's choice, so remove it")
+  }
+  checkKeys(report, file, '', Object.fromEntries(Object.entries(header).filter(([k]) => !RETIRED_PLAYBOOK_KEYS.includes(k))), PLAYBOOK_KEYS)
   if ('schema' in header) checkSchema(report, file, 'schema', /^\d+$/.test(header.schema) ? Number(header.schema) : header.schema)
   for (const key of ['page_file', 'pages', 'viewports']) {
     if (key in header && !header[key]) report.add(file, key, 'empty')
@@ -121,12 +125,6 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
     for (const page of header.pages.split(',').map((x) => x.trim())) if (!page.startsWith('/')) report.add(file, 'pages', `${page} must start with /`)
   }
   for (const key of ['title', 'icon', 'pitch']) if (key in header && !header[key]) report.add(file, key, 'empty')
-  if (header.animal && !ANIMALS.includes(header.animal)) report.add(file, 'animal', `not one of Mux Bot's animals (closest: ${closest(header.animal, ANIMALS)})`)
-  if (header.colors) {
-    header.colors.split(',').map((c) => c.trim()).forEach((c, i) => {
-      if (!/^[0-9a-fA-F]{6}$/.test(c)) report.add(file, `colors[${i}]`, `${c} is not a 6-digit hex color`)
-    })
-  }
   if (header.crew) {
     for (const c of header.crew.split(',').map((x) => x.trim())) {
       if (!CREW.includes(c)) report.add(file, 'crew', `${c} is not a crew role (closest: ${closest(c, CREW)})`)
