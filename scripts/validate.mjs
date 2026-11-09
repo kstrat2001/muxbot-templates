@@ -15,6 +15,7 @@ export const SCHEMA = 1
 
 const ANIMALS = ['octopus', 'fox', 'otter', 'beaver', 'owl', 'cat', 'bear', 'rabbit', 'panda', 'raccoon', 'penguin', 'frog', 'dog', 'squirrel']
 const CREW = ['coder', 'reviewer', 'evalRunner', 'researcher']
+const FIRST_RUN_PLACEHOLDERS = ['name', 'purpose', 'feel']
 
 const LIST_KEYS = { schema: true, templates: true }
 const ENTRY_KEYS = { id: true, repo: true, ref: true, title: true, icon: true, summary: false }
@@ -126,6 +127,14 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
   const persona = sections.find((s) => s.heading === 'Persona')
   if (!persona) report.add(file, '## Persona', 'missing (required)')
   else if (!body(persona)) report.add(file, '## Persona', 'empty')
+  const firstRun = sections.filter((s) => s.heading === 'First run')
+  if (firstRun.length > 1) report.add(file, '## First run', 'given twice')
+  for (const s of firstRun) {
+    if (!body(s)) report.add(file, '## First run', 'empty (leave the section out instead)')
+    for (const m of body(s).matchAll(/\{([^}]*)\}/g)) {
+      if (!FIRST_RUN_PLACEHOLDERS.includes(m[1])) report.add(file, '## First run', `unknown placeholder {${m[1]}} (closest: {${closest(m[1], FIRST_RUN_PLACEHOLDERS)}})`)
+    }
+  }
   const skills = sections.filter((s) => s.heading.startsWith('Skill:'))
   if (skills.length === 0) report.add(file, '## Skill:', 'at least one skill section is required')
   for (const s of skills) {

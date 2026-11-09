@@ -65,6 +65,11 @@ crew: coder
 
 You look after {name}, a website built with Vite and React. ...
 
+## First run
+
+Make {name} the site for {purpose}.
+Make it feel {feel}: set the colors and fonts to match.
+
 ## Skill: Add a page
 
 When: someone wants a new page. "Add an About page", "I need a pricing page".
@@ -90,6 +95,7 @@ Done when: ...
 |---|---|---|
 | `## Questions` | yes | What Mux Bot asks first, as `- ` bullets: the name, what it's for, how it should feel. |
 | `## Persona` | yes | The new bot's persona; `{name}` becomes the bot's name. |
+| `## First run` | no | The new bot's first dispatch, written from your answers: one instruction per line, with `{name}`, `{purpose}` (the second question's answer) and `{feel}` (the third's). Mux Bot fills them in and joins the lines into one task, leaving out any line whose answer was left blank; the bot posts it as a dispatch card that waits for Approve. Any other `{placeholder}` is refused. |
 | `## Skill: <name>` | at least one | When it applies (with example asks in quotes; the first one is what the bot offers as an example), what to do, the files and conventions, and when it's done. Copied into the bot when it's made. |
 
 An unknown header key is refused by name. Other `##` sections are ignored.
