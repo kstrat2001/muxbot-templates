@@ -54,8 +54,6 @@ schema: 2
 title: Build a website
 icon: globe
 pitch: A one-page site you can grow.
-animal: fox
-colors: 0e9f8e, ffffff
 crew: coder
 page_file: src/pages/{page}.tsx
 pages: /
@@ -96,12 +94,12 @@ Done when: ...
 | `title` | yes | The use case's name. |
 | `icon` | yes | An SF Symbol name. |
 | `pitch` | yes | One sentence on what you get. |
-| `animal` | no | The new bot's animal: octopus, fox, otter, beaver, owl, cat, bear, rabbit, panda, raccoon, penguin, frog, dog or squirrel. |
-| `colors` | no | The bot's main color, then its eye color, as 6-digit hex. |
 | `crew` | no | Comma-separated crew roles: coder, reviewer, evalRunner, researcher. Coder when left out. |
 | `page_file` | no | Where a page's source lives, `{page}` for the route's last segment (`/` is `home`). Schema 2. |
 | `pages` | no | Comma-separated paths worth previewing. Schema 2. |
 | `viewports` | no | Comma-separated widths worth checking: `desktop`, `tablet`, `phone`. Schema 2. |
+
+Retired: `animal` and `colors`. A bot's look is the user's choice: Mux Bot gives each new bot a fresh look they can shuffle, so a template doesn't set one. The validator refuses them; Mux Bot still reads a playbook that has them and ignores them.
 
 | Section | Required | What it is |
 |---|---|---|
