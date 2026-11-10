@@ -8,20 +8,26 @@
 //   node scripts/validate.mjs                 the registry and every template
 //   node scripts/validate.mjs --template DIR  one template checkout on disk
 
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 
-export const SCHEMA = 2
+export const SCHEMA = 3
+// The oldest schema a file here may still follow (Mux Bot reads it).
+export const OLDEST = 2
 
 const CREW = ['coder', 'reviewer', 'evalRunner', 'researcher']
 const FIRST_RUN_PLACEHOLDERS = ['name', 'purpose', 'feel']
+const VIEWPORTS = ['desktop', 'phone']
+// Preview pictures: in this repo, never in the template (its files are
+// copied into every new project).
+const PREVIEW_MAX_BYTES = 400 * 1024
 
 const LIST_KEYS = { schema: true, templates: true }
 const ENTRY_KEYS = { id: true, repo: true, ref: true, title: true, icon: true, summary: false }
 // Retired playbook keys: the bot's look is the user's choice (SCHEMA.md).
 const RETIRED_PLAYBOOK_KEYS = ['animal', 'colors']
 const PLAYBOOK_KEYS = { schema: true, title: true, icon: true, pitch: true, crew: false,
-  page_file: false, pages: false, viewports: false }
+  page_file: false, pages: false, viewports: false, previews: false }
 // darkmux's preview recipe (its client_preview reader): an unknown key is
 // refused there, and a template has no checkout for env_from_source.
 const RECIPE_VERSION = '1.0'
@@ -58,11 +64,11 @@ function checkKeys(report, file, prefix, object, keys) {
 
 function checkSchema(report, file, keyPath, value) {
   if (value === undefined) return // reported as missing
-  if (value !== SCHEMA) {
+  if (!(Number.isInteger(value) && value >= OLDEST && value <= SCHEMA)) {
     const newer = Number.isInteger(value) && value > SCHEMA
     report.add(file, keyPath, newer
       ? `schema ${value} is newer than this validator's (${SCHEMA}); update the validator`
-      : `must be ${SCHEMA}`)
+      : `must be ${OLDEST} to ${SCHEMA}`)
   }
 }
 
@@ -112,7 +118,13 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
     if (key in header) report.add(file, key, "retired: a bot's look is the user's choice, so remove it")
   }
   checkKeys(report, file, '', Object.fromEntries(Object.entries(header).filter(([k]) => !RETIRED_PLAYBOOK_KEYS.includes(k))), PLAYBOOK_KEYS)
-  if ('schema' in header) checkSchema(report, file, 'schema', /^\d+$/.test(header.schema) ? Number(header.schema) : header.schema)
+  const schema = /^\d+$/.test(header.schema ?? '') ? Number(header.schema) : header.schema
+  if ('schema' in header) checkSchema(report, file, 'schema', schema)
+  const previews = []
+  if ('previews' in header) {
+    if (schema < 3) report.add(file, 'previews', 'arrived with schema 3')
+    else previews.push(...viewportList(report, file, 'previews', header.previews))
+  }
   for (const key of ['page_file', 'pages', 'viewports']) {
     if (key in header && !header[key]) report.add(file, key, 'empty')
   }
@@ -132,8 +144,11 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
   }
   const body = (s) => s.body.join('\n').trim()
   const questions = sections.find((s) => s.heading === 'Questions')
+  let choices = []
   if (!questions) report.add(file, '## Questions', 'missing (required)')
   else if (!questions.body.some((l) => /^\s*[-*] \S/.test(l))) report.add(file, '## Questions', 'needs at least one "- " question')
+  else if (schema >= 3) choices = readChoices(report, file, questions.body)
+  const placeholders = [...FIRST_RUN_PLACEHOLDERS, ...choices.map((c) => c.key)]
   const persona = sections.find((s) => s.heading === 'Persona')
   if (!persona) report.add(file, '## Persona', 'missing (required)')
   else if (!body(persona)) report.add(file, '## Persona', 'empty')
@@ -142,7 +157,7 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
   for (const s of firstRun) {
     if (!body(s)) report.add(file, '## First run', 'empty (leave the section out instead)')
     for (const m of body(s).matchAll(/\{([^}]*)\}/g)) {
-      if (!FIRST_RUN_PLACEHOLDERS.includes(m[1])) report.add(file, '## First run', `unknown placeholder {${m[1]}} (closest: {${closest(m[1], FIRST_RUN_PLACEHOLDERS)}})`)
+      if (!placeholders.includes(m[1])) report.add(file, '## First run', `unknown placeholder {${m[1]}} (closest: {${closest(m[1], placeholders)}})`)
     }
   }
   const skills = sections.filter((s) => s.heading.startsWith('Skill:'))
@@ -151,6 +166,66 @@ export function validatePlaybook(report, text, file = 'PLAYBOOK.md') {
     const name = s.heading.slice('Skill:'.length).trim()
     if (!name) report.add(file, `## ${s.heading}`, 'a skill needs a name')
     else if (!body(s)) report.add(file, `## Skill: ${name}`, 'empty')
+  }
+  return { previews, choices }
+}
+
+function viewportList(report, file, keyPath, value) {
+  const words = value.split(',').map((x) => x.trim()).filter(Boolean)
+  if (words.length === 0) report.add(file, keyPath, 'empty')
+  for (const w of words) if (!VIEWPORTS.includes(w)) report.add(file, keyPath, `${w} is not a preview viewport (closest: ${closest(w, VIEWPORTS)})`)
+  if (new Set(words).size !== words.length) report.add(file, keyPath, 'a viewport given twice')
+  return words.filter((w) => VIEWPORTS.includes(w))
+}
+
+const isId = (v) => /^[a-z0-9][a-z0-9-]*$/.test(v)
+
+/** Schema 3 choice questions: a "- " question at the start of its line,
+ * with indented `key:`, optional `previews:` and `- id: Title. Detail.` lines. */
+export function readChoices(report, file, lines) {
+  const items = []
+  for (const raw of lines) {
+    if (!raw.trim()) continue
+    const line = raw.trim()
+    const indented = /^\s/.test(raw)
+    const bullet = /^[-*] /.test(line)
+    if (!indented && bullet) items.push({ text: line.slice(2).trim(), key: undefined, previews: [], options: [] })
+    else if (indented && items.length && line.startsWith('key:')) items.at(-1).key = line.slice(4).trim()
+    else if (indented && items.length && line.startsWith('previews:')) items.at(-1).previews = viewportList(report, file, `## Questions "${items.at(-1).text}" previews`, line.slice(9))
+    else if (indented && items.length && bullet) {
+      const m = /^([^:]+):\s*(.+)$/.exec(line.slice(2))
+      const at = `## Questions "${items.at(-1).text}"`
+      if (!m || !isId(m[1].trim())) report.add(file, at, `a choice is "- id: Title. What it fits." (got "${line}")`)
+      else items.at(-1).options.push({ id: m[1].trim(), title: m[2].split('. ')[0] })
+    }
+  }
+  const choices = []
+  for (const item of items) {
+    if (!item.options.length && item.key === undefined && !item.previews.length) continue
+    const at = `## Questions "${item.text}"`
+    if (!item.key || !isId(item.key)) report.add(file, at, 'a choice question needs "key: <lowercase-key>"')
+    else if (FIRST_RUN_PLACEHOLDERS.includes(item.key) || choices.some((c) => c.key === item.key)) report.add(file, at, `key ${item.key} is already taken`)
+    if (item.options.length < 2) report.add(file, at, 'a choice question needs at least two choices')
+    if (new Set(item.options.map((o) => o.id)).size !== item.options.length) report.add(file, at, 'a choice id given twice')
+    choices.push(item)
+  }
+  return choices
+}
+
+/** The pictures a template's playbook asks for, here in previews/<id>/. */
+export async function checkPreviewImages(report, root, id, { previews, choices }) {
+  const wanted = previews.map((v) => `${v}.jpg`)
+  for (const c of choices) for (const o of c.options) for (const v of c.previews) wanted.push(`${o.id}-${v}.jpg`)
+  for (const name of wanted) {
+    const rel = `previews/${id}/${name}`
+    try {
+      const { size } = await stat(path.join(root, rel))
+      if (size > PREVIEW_MAX_BYTES) report.add(rel, '(file)', `${Math.round(size / 1024)} KB, over ${PREVIEW_MAX_BYTES / 1024} KB`)
+      const head = await readFile(path.join(root, rel))
+      if (!(head[0] === 0xff && head[1] === 0xd8)) report.add(rel, '(file)', 'not a JPEG')
+    } catch {
+      report.add(rel, '(file)', `missing: the playbook of ${id} asks for this picture`)
+    }
   }
 }
 
@@ -196,12 +271,13 @@ async function fetchText(url) {
   return res.text()
 }
 
-async function validateTemplateAt(report, entry) {
+async function validateTemplateAt(report, entry, root) {
   const base = `https://raw.githubusercontent.com/${entry.repo}/${entry.ref}`
   for (const [name, check] of [['PLAYBOOK.md', validatePlaybook], ['.darkmux/preview.json', validatePreview]]) {
     const file = `${entry.repo}@${entry.ref.slice(0, 7)}:${name}`
     try {
-      check(report, await fetchText(`${base}/${name}`), file)
+      const found = check(report, await fetchText(`${base}/${name}`), file)
+      if (name === 'PLAYBOOK.md' && found) await checkPreviewImages(report, root, entry.id, found)
     } catch (e) {
       report.add(file, '(file)', `could not be fetched (${e.message})`)
     }
@@ -219,7 +295,7 @@ async function main(argv) {
     const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..')
     const entries = validateList(report, await readFile(path.join(root, 'templates.json'), 'utf8'))
     for (const entry of entries) {
-      if (entry?.repo && /^[0-9a-f]{40}$/.test(entry.ref ?? '')) await validateTemplateAt(report, entry)
+      if (entry?.repo && /^[0-9a-f]{40}$/.test(entry.ref ?? '')) await validateTemplateAt(report, entry, root)
     }
     if (report.ok) console.log(`templates.json: schema ${SCHEMA}, ${entries.length} template(s): ${entries.map((e) => `${e.id} (${e.repo}@${e.ref.slice(0, 7)})`).join(', ')}`)
   }
