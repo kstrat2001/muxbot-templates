@@ -1,6 +1,8 @@
 # Mux Bot template schema
 
-One versioned schema covers this repo's `templates.json` and each template's `PLAYBOOK.md`; each says which version it follows. This is **schema 2**. A template's `.darkmux/preview.json` is darkmux's own recipe, in darkmux's format (see below).
+One versioned schema covers this repo's `templates.json` and each template's `PLAYBOOK.md`; each says which version it follows. This is **schema 3**. A template's `.darkmux/preview.json` is darkmux's own recipe, in darkmux's format (see below).
+
+**Schema 3** (from schema 2): a question in PLAYBOOK.md can be a **choice** ("Pick a design."), answered by tapping one of its choices, and a template can have **preview pictures** (desktop and phone) for itself and for each choice. Both are optional. The pictures live in this repo under `previews/`, never in the template, since a template's files are copied into every new project. Nothing in templates.json changed, so a list may still say `"schema": 2`. Mux Bot still reads schema 1 and 2 templates.
 
 **Schema 2** (from schema 1): `.darkmux/preview.json` holds only darkmux's recipe (`schema_version: "1.0"`), as darkmux refuses any other key, and the app's hints (`page_file`, `pages`, `viewports`, `conventions`) move into PLAYBOOK.md. Mux Bot still reads schema 1 templates.
 
@@ -32,7 +34,7 @@ One versioned schema covers this repo's `templates.json` and each template's `PL
 
 | Key | Required | What it is |
 |---|---|---|
-| `schema` | yes | `2`. |
+| `schema` | yes | `2` or `3` (the list itself is the same in both). |
 | `templates` | yes | The list. |
 | `id` | yes | Stable, lowercase letters, digits and dashes. A bot made from the template remembers it. |
 | `repo` | yes | `owner/name` on GitHub. Public. |
@@ -98,18 +100,48 @@ Done when: ...
 | `page_file` | no | Where a page's source lives, `{page}` for the route's last segment (`/` is `home`). Schema 2. |
 | `pages` | no | Comma-separated paths worth previewing. Schema 2. |
 | `viewports` | no | Comma-separated widths worth checking: `desktop`, `tablet`, `phone`. Schema 2. |
+| `previews` | no | `desktop, phone` (either or both): this repo has the template's own pictures, `previews/<id>/desktop.jpg` and `phone.jpg`, shown on its card. Schema 3. |
 
 Retired: `animal` and `colors`. A bot's look is the user's choice: Mux Bot gives each new bot a fresh look they can shuffle, so a template doesn't set one. The validator refuses them; Mux Bot still reads a playbook that has them and ignores them.
 
 | Section | Required | What it is |
 |---|---|---|
-| `## Questions` | yes | What Mux Bot asks first, as `- ` bullets: the name, what it's for, how it should feel. |
+| `## Questions` | yes | What Mux Bot asks first, as `- ` bullets: the name, what it's for, how it should feel. Since schema 3, a question can be a choice (below). |
 | `## Conventions` | no | A sentence or two on the project's layout, passed to the crew with every run. Schema 2. |
 | `## Persona` | yes | The new bot's persona; `{name}` becomes the bot's name. |
-| `## First run` | no | The new bot's first dispatch, written from your answers: one instruction per line, with `{name}`, `{purpose}` (the second question's answer) and `{feel}` (the third's). Mux Bot fills them in and joins the lines into one task, leaving out any line whose answer was left blank; the bot posts it as a dispatch card that waits for Approve. Any other `{placeholder}` is refused. |
+| `## First run` | no | The new bot's first dispatch, written from your answers: one instruction per line, with `{name}`, `{purpose}` (the second question's answer), `{feel}` (the third's) and, since schema 3, each choice question's `{key}` (the picked choice's id). Mux Bot fills them in and joins the lines into one task, leaving out any line whose answer was left blank; the bot posts it as a dispatch card that waits for Approve. Any other `{placeholder}` is refused. |
 | `## Skill: <name>` | at least one | When it applies (with example asks in quotes; the first one is what the bot offers as an example), what to do, the files and conventions, and when it's done. Copied into the bot when it's made. |
 
 An unknown header key is refused by name. Other `##` sections are ignored.
+
+### Choice questions (schema 3)
+
+A question with indented lines under it is a choice:
+
+```markdown
+## Questions
+
+- What's the site called?
+- What is it for, in a sentence?
+- How should it feel? (For example: warm and friendly, calm and quiet.)
+- Pick a design.
+  key: design
+  previews: desktop, phone
+  - editorial: Editorial. Warm paper and a classic serif: a shop, a cafe.
+  - modern: Modern. Clean and bright with a vivid blue: an app, a product.
+```
+
+| Line | Required | What it is |
+|---|---|---|
+| `key: <key>` | yes | Lowercase letters, digits and dashes; not `name`, `purpose` or `feel`. The pick is `{key}` in `## First run`. |
+| `previews: desktop, phone` | no | Each choice has these pictures here, `previews/<template id>/<choice id>-desktop.jpg` (and `-phone.jpg`). Without it, the choices show as chips. |
+| `- <id>: <Title>. <What it fits.>` | two or more | One choice: a unique id (lowercase letters, digits and dashes), its title up to the first `. `, then a sentence on what it fits. |
+
+The first choice is picked until you pick another. The word questions keep their order (the name, what it's for, how it should feel) whatever choices sit among them.
+
+### Preview pictures
+
+JPEG, at most 400 KB each, in `previews/<template id>/`: a desktop picture at 1280 × 800 and a phone picture at 390 × 844 (taken at 2×). The Validate check fails a pull request where a playbook asks for a picture that isn't here.
 
 ## .darkmux/preview.json
 
