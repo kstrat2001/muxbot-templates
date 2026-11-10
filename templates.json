@@ -4,7 +4,7 @@
     {
       "id": "website",
       "repo": "kstrat2001/muxbot-template-site",
-      "ref": "d2e8900772909b62da485c37b0bd473d8085666c",
+      "ref": "cc66fa0a7ca1df2e28b04397759e8d10837c7b59",
       "title": "Build a website",
       "icon": "globe",
       "summary": "A one-page site you can grow, with a live preview."
@@ -12,7 +12,7 @@
     {
       "id": "book",
       "repo": "kstrat2001/muxbot-template-book",
-      "ref": "eab86de5070fa9ca54fefa3c9c5fc7d693008f41",
+      "ref": "a98736dad72d6cb80d797941b2dea90369b41ad4",
       "title": "Write a book",
       "icon": "book.closed",
       "summary": "A book manuscript with a page preview, exported as an ebook or a Word file."
